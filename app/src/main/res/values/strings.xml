@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">SenseVoice ASR</string>
+    <string name="hold_to_record">Hold to Record</string>
+    <string name="recording">Recording...</string>
+    <string name="clear">Clear</string>
+    <string name="processing">Processing...</string>
+    <string name="mic_permission_required">Microphone permission is required for speech recognition</string>
+    <string name="model_not_loaded">Model not loaded. Please check assets.</string>
+    <string name="error_recording">Error starting recording</string>
+</resources>
