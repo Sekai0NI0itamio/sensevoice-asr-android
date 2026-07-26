@@ -88,15 +88,17 @@ class OnnxInference(private val context: Context) {
             )
 
             val outputs = sess.run(inputs)
-            val outputTensor = outputs.firstOrNull() ?: return ""
+            val outputEntry = outputs.iterator().next()
+            val outputTensor = outputEntry.value as? OnnxTensor ?: return ""
+            val rawValue = outputTensor.value
 
             // Decode: find argmax per frame
             // Output shape: [1, num_frames, vocab_size] -> float[][][]
-            val tokenIds = when (val value = outputTensor.value) {
+            val tokenIds = when (rawValue) {
                 is Array<*> -> {
                     // value is Array<Array<FloatArray>> = float[][][]
-                    if (value.isNotEmpty() && value[0] is Array<*>) {
-                        val batch0 = value[0] as Array<*>  // [num_frames, vocab_size]
+                    if (rawValue.isNotEmpty() && rawValue[0] is Array<*>) {
+                        val batch0 = rawValue[0] as Array<*>  // [num_frames, vocab_size]
                         IntArray(batch0.size) { frame ->
                             val frameArr = batch0[frame] as FloatArray
                             var maxIdx = 0
@@ -113,20 +115,6 @@ class OnnxInference(private val context: Context) {
                         IntArray(0)
                     }
                 }
-                is FloatArray -> {
-                    // Single frame output
-                    IntArray(1) {
-                        var maxIdx = 0
-                        var maxVal = value[0]
-                        for (i in 1 until value.size) {
-                            if (value[i] > maxVal) {
-                                maxVal = value[i]
-                                maxIdx = i
-                            }
-                        }
-                        maxIdx
-                    }
-                }
                 else -> IntArray(0)
             }
 
@@ -138,6 +126,7 @@ class OnnxInference(private val context: Context) {
             language.close()
             textnorm.close()
             outputTensor.close()
+            outputs.close()
 
             return result
         } catch (e: Exception) {
