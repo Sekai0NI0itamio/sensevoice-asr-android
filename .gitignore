@@ -11,5 +11,6 @@ local.properties
 /app/build
 /android-sdk
 /build-output
+/apk-output
 debug.keystore
 debug.keystore.b64

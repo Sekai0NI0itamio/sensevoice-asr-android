@@ -7,12 +7,14 @@ import org.json.JSONArray
 /**
  * Simple tokenizer for SenseVoiceSmall.
  * Loads token mapping from tokens.json and decodes token IDs.
- * Falls back to character-level decoding if no token file is available.
+ * Strips all special <|...|> meta tokens (language, emotion, event markers, etc.)
+ * leaving only the actual transcribed content.
  */
 class Tokenizer(private val context: Context) {
     companion object {
         private const val TAG = "Tokenizer"
         private const val TOKENS_FILE = "tokens.json"
+        private val SPECIAL_TOKEN_REGEX = Regex("<\\|[^|]+\\|>")
     }
 
     private var idToToken: Map<Int, String> = emptyMap()
@@ -37,6 +39,8 @@ class Tokenizer(private val context: Context) {
     /**
      * Decode a list of token IDs into text.
      * Uses greedy CTC-style decoding: collapse consecutive duplicates, remove blanks.
+     * All special meta-tokens matching <|...|> are filtered out so only
+     * the actual spoken content appears in the result.
      */
     fun decode(tokenIds: IntArray): String {
         if (idToToken.isNotEmpty()) {
@@ -44,20 +48,19 @@ class Tokenizer(private val context: Context) {
             var prev = -1
             for (id in tokenIds) {
                 if (id != prev && id != 0) {
-                    idToToken[id]?.let { decoded.add(it) }
+                    idToToken[id]?.let { token ->
+                        if (!token.matches(SPECIAL_TOKEN_REGEX)) {
+                            decoded.add(token)
+                        }
+                    }
                 }
                 prev = id
             }
             return decoded.joinToString("")
                 .replace("▁", " ")
-                .replace("<|zh|>", "")
-                .replace("<|en|>", "")
-                .replace("<|yue|>", "")
-                .replace("<|ja|>", "")
-                .replace("<|ko|>", "")
+                .replace(SPECIAL_TOKEN_REGEX, "")
                 .trim()
         }
-        // Fallback: just return ids as text
         return "tokens: ${tokenIds.take(20).joinToString()}"
     }
 }

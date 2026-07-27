@@ -7,10 +7,12 @@ import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
+import kotlin.math.sqrt
 
 /**
  * Captures 16kHz mono PCM audio from the device microphone.
  * Emits audio chunks as ShortArrays via a SharedFlow.
+ * Supports a diagnostic log callback for UI visibility.
  */
 class AudioRecorder(
     private val sampleRate: Int = 16000,
@@ -29,8 +31,22 @@ class AudioRecorder(
     private val _audioChunks = MutableSharedFlow<ShortArray>(replay = 0, extraBufferCapacity = 64)
     val audioChunks: SharedFlow<ShortArray> = _audioChunks
 
+    /** Diagnostic log callback (one line per event) */
+    var logCallback: ((String) -> Unit)? = null
+    private var chunkCount: Int = 0
+
+    private fun log(msg: String) {
+        Log.i(TAG, msg)
+        logCallback?.invoke("[AudioRecorder] $msg")
+    }
+
+    private fun logErr(msg: String) {
+        Log.e(TAG, msg)
+        logCallback?.invoke("[AudioRecorder][ERR] $msg")
+    }
+
     private val bufferSize: Int get() = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
-        .coerceAtLeast(sampleRate * chunkMs / 1000 * 2) // 2 bytes per sample
+        .coerceAtLeast(sampleRate * chunkMs / 1000 * 2)
 
     val chunkSamples: Int get() = sampleRate * chunkMs / 1000
 
@@ -39,6 +55,7 @@ class AudioRecorder(
             Log.w(TAG, "Already recording")
             return false
         }
+        chunkCount = 0
 
         try {
             audioRecord = AudioRecord(
@@ -50,40 +67,57 @@ class AudioRecorder(
             )
 
             if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
-                Log.e(TAG, "AudioRecord failed to initialize")
+                logErr("AudioRecord failed to initialize (state=${audioRecord?.state})")
                 audioRecord?.release()
                 audioRecord = null
                 return false
             }
 
             audioRecord?.startRecording()
-            Log.i(TAG, "Recording started: ${sampleRate}Hz, ${chunkMs}ms chunks, buffer=$bufferSize")
+            val recState = audioRecord?.recordingState
+            log("Recording started: ${sampleRate}Hz, ${chunkMs}ms chunks (${chunkSamples} samples/chunk), bufferSize=$bufferSize, recState=$recState")
 
             recordingJob = scope.launch {
                 val buffer = ShortArray(chunkSamples)
                 while (isActive) {
                     val read = audioRecord?.read(buffer, 0, chunkSamples) ?: -1
                     if (read > 0) {
+                        chunkCount++
                         val chunk = if (read == chunkSamples) {
                             buffer.copyOf()
                         } else {
                             buffer.copyOf(read)
                         }
+                        // Compute RMS of this chunk for diagnostics
+                        var sumSq = 0.0
+                        var mx: Short = Short.MIN_VALUE
+                        var mn: Short = Short.MAX_VALUE
+                        for (s in chunk) {
+                            sumSq += (s * s).toDouble()
+                            if (s > mx) mx = s
+                            if (s < mn) mn = s
+                        }
+                        val rms = sqrt(sumSq / chunk.size).toFloat()
+                        // Every 10th chunk (2s at 200ms), report stats
+                        if (chunkCount == 1 || chunkCount % 10 == 0) {
+                            log("Chunk #$chunkCount: $read samples, RMS_int16=$rms, min=$mn, max=$mx")
+                        }
                         _audioChunks.emit(chunk)
                     } else if (read < 0) {
-                        Log.e(TAG, "AudioRecord read error: $read")
+                        logErr("AudioRecord read error code=$read after $chunkCount successful chunks")
                         break
                     }
                 }
+                log("Recording loop exited after $chunkCount chunks")
             }
             return true
         } catch (e: SecurityException) {
-            Log.e(TAG, "Microphone permission denied", e)
+            logErr("Microphone permission denied: ${e.message}")
             audioRecord?.release()
             audioRecord = null
             return false
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to start recording", e)
+            logErr("Failed to start recording: ${e.javaClass.simpleName}: ${e.message}")
             audioRecord?.release()
             audioRecord = null
             return false
@@ -97,10 +131,10 @@ class AudioRecorder(
             audioRecord?.stop()
             audioRecord?.release()
         } catch (e: Exception) {
-            Log.e(TAG, "Error stopping recording", e)
+            logErr("Error stopping recording: ${e.message}")
         }
         audioRecord = null
-        Log.i(TAG, "Recording stopped")
+        log("Recording stopped. Total chunks emitted: $chunkCount")
     }
 
     fun isRecording(): Boolean = audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING
