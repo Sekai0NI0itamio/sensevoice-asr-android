@@ -22,8 +22,10 @@ class FeatureExtractor(
 ) {
     companion object {
         private const val TAG = "FeatureExtractor"
-        private const val AUDIO_SCALE = 32768f  // 1 << 15, matches Python upsacle_samples
+        private const val AUDIO_SCALE = 32768f
         private const val CMVN_FILE = "am.mvn"
+        private const val LOG_FLOOR = 1e-10f
+        private const val FBANK_MAX = 50f
     }
 
     private val frameLength: Int = (sampleRate * frameLengthMs / 1000f).toInt()
@@ -163,19 +165,21 @@ class FeatureExtractor(
             for (j in 1 until frame.size) {
                 preEmphed[j] = frame[j] - preEmphasis * frame[j - 1]
             }
-            // Apply Hamming window
-            for (j in preEmphed.indices) {
-                fftReal[j] = preEmphed[j] * hammingWindow[j]
-            }
-            for (j in preEmphed.size until nFft) {
+            // Apply Hamming window AND fully zero BOTH FFT arrays to prevent cross-frame contamination
+            // (CRITICAL: without zeroing fftImag[0..preEmphed.size], residue from prev frame FFT pollutes this frame -> NaN)
+            for (j in 0 until nFft) {
                 fftReal[j] = 0f
                 fftImag[j] = 0f
+            }
+            for (j in preEmphed.indices) {
+                fftReal[j] = preEmphed[j] * hammingWindow[j]
             }
             // Compute FFT
             realFft(fftReal, fftImag, nFft)
             // Power spectrum
             val powerSpec = FloatArray(nFft / 2 + 1) { k ->
-                (fftReal[k] * fftReal[k] + fftImag[k] * fftImag[k]) / nFft
+                val r = fftReal[k]; val im = fftImag[k]
+                (r * r + im * im) / nFft
             }
             // Apply mel filterbank
             for (m in 0 until nMels) {
@@ -183,7 +187,14 @@ class FeatureExtractor(
                 for (k in 0..nFft / 2) {
                     sum += melFilterbank[m][k] * powerSpec[k]
                 }
-                fbankFeatures[i][m] = ln(max(sum, 1e-10f))
+                // Log with epsilon floor, then clip to avoid extreme values
+                val logged = ln(max(sum, LOG_FLOOR))
+                fbankFeatures[i][m] = logged.coerceIn(-FBANK_MAX, FBANK_MAX)
+            }
+            // Sanitize: NaN/Inf defense-in-depth on this frame's fbank
+            for (m in 0 until nMels) {
+                val v = fbankFeatures[i][m]
+                if (v.isNaN() || v.isInfinite()) fbankFeatures[i][m] = 0f
             }
         }
 
@@ -229,6 +240,14 @@ class FeatureExtractor(
                 }
             } else {
                 Log.w(TAG, "CMVN dims mismatch: addShift=${addShift.size}, rescale=${rescale.size}, expected=$featDim")
+            }
+        }
+
+        // Final NaN/Inf sanitization across ALL LFR features — defense-in-depth
+        for (frame in lfrFeatures) {
+            for (d in frame.indices) {
+                val v = frame[d]
+                if (v.isNaN() || v.isInfinite()) frame[d] = 0f
             }
         }
 

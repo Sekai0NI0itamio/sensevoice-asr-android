@@ -12,5 +12,7 @@ local.properties
 /android-sdk
 /build-output
 /apk-output
+/gh-artifacts
+/gh-artifacts-emulator
 debug.keystore
 debug.keystore.b64
