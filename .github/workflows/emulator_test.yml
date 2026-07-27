@@ -48,7 +48,7 @@ jobs:
           force-avd-creation: false
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -memory 4096 -netdelay none -netspeed full
           disable-animations: true
-          disable-linux-hw-acceleration: false
+          disable-linux-hw-accel: false
           script: |
             echo "=== Waiting for emulator to fully boot ==="
             adb wait-for-device
