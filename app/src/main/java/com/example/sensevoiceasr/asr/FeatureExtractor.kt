@@ -1,13 +1,14 @@
 package com.example.sensevoiceasr.asr
 
+import android.content.Context
 import android.util.Log
 import kotlin.math.*
 
 /**
- * Mel filterbank feature extraction with LFR stacking.
+ * Mel filterbank feature extraction with LFR stacking and CMVN normalization.
  * Matches the WavFrontend config from SenseVoiceSmall:
  *   fs=16000, n_mels=80, frame_length=25ms, frame_shift=10ms
- *   lfr_m=7, lfr_n=6
+ *   lfr_m=7, lfr_n=6, with CMVN from am.mvn
  */
 class FeatureExtractor(
     private val sampleRate: Int = 16000,
@@ -21,6 +22,8 @@ class FeatureExtractor(
 ) {
     companion object {
         private const val TAG = "FeatureExtractor"
+        private const val AUDIO_SCALE = 32768f  // 1 << 15, matches Python upsacle_samples
+        private const val CMVN_FILE = "am.mvn"
     }
 
     private val frameLength: Int = (sampleRate * frameLengthMs / 1000f).toInt()
@@ -38,11 +41,15 @@ class FeatureExtractor(
     private val fftReal = FloatArray(nFft)
     private val fftImag = FloatArray(nFft)
 
+    // CMVN parameters (loaded from am.mvn)
+    private var cmvnAddShift: FloatArray? = null
+    private var cmvnRescale: FloatArray? = null
+    private var cmvnLoaded = false
+
     private fun hzToMel(hz: Float): Float = 1127f * ln(1f + hz / 700f)
     private fun melToHz(mel: Float): Float = 700f * (exp(mel / 1127f) - 1f)
 
     private fun createMelFilterbank(): Array<FloatArray> {
-        val fftBinFreq = FloatArray(nFft / 2 + 1) { it * sampleRate.toFloat() / nFft }
         val melLow = hzToMel(0f)
         val melHigh = hzToMel(sampleRate / 2f)
         val melPoints = FloatArray(nMels + 2) { melLow + it * (melHigh - melLow) / (nMels + 1) }
@@ -62,11 +69,86 @@ class FeatureExtractor(
     }
 
     /**
-     * Extract LFR-stacked fbank features from raw audio.
+     * Load CMVN parameters from am.mvn file in assets.
+     * Parses the Kaldi nnet1 format to extract AddShift (means) and Rescale (vars).
+     */
+    fun loadCmvn(context: Context): Boolean {
+        if (cmvnLoaded) return true
+        return try {
+            val content = context.assets.open(CMVN_FILE).bufferedReader().use { it.readText() }
+            val lines = content.lines()
+
+            var addShiftValues: FloatArray? = null
+            var rescaleValues: FloatArray? = null
+
+            for (i in lines.indices) {
+                val parts = lines[i].trim().split("\\s+".toRegex())
+                if (parts.isEmpty()) continue
+
+                when (parts[0]) {
+                    "<AddShift>" -> {
+                        if (i + 1 < lines.size) {
+                            val nextParts = lines[i + 1].trim().split("\\s+".toRegex())
+                            if (nextParts.isNotEmpty() && nextParts[0] == "<LearnRateCoef>") {
+                                // Format: <LearnRateCoef> 0 [ val1 val2 ... valN ]
+                                val startIdx = nextParts.indexOf("[") + 1
+                                val endIdx = nextParts.lastIndexOf("]")
+                                if (startIdx > 0 && endIdx > startIdx) {
+                                    val valList = nextParts.subList(startIdx, endIdx)
+                                    addShiftValues = FloatArray(valList.size) { valList[it].toFloat() }
+                                }
+                            }
+                        }
+                    }
+                    "<Rescale>" -> {
+                        if (i + 1 < lines.size) {
+                            val nextParts = lines[i + 1].trim().split("\\s+".toRegex())
+                            if (nextParts.isNotEmpty() && nextParts[0] == "<LearnRateCoef>") {
+                                val startIdx = nextParts.indexOf("[") + 1
+                                val endIdx = nextParts.lastIndexOf("]")
+                                if (startIdx > 0 && endIdx > startIdx) {
+                                    val valList = nextParts.subList(startIdx, endIdx)
+                                    rescaleValues = FloatArray(valList.size) { valList[it].toFloat() }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (addShiftValues != null && rescaleValues != null) {
+                cmvnAddShift = addShiftValues
+                cmvnRescale = rescaleValues
+                cmvnLoaded = true
+                Log.i(TAG, "CMVN loaded: addShift=${addShiftValues.size}, rescale=${rescaleValues.size}")
+                Log.i(TAG, "CMVN addShift first 5: ${addShiftValues.take(5).joinToString()}")
+                Log.i(TAG, "CMVN rescale first 5: ${rescaleValues.take(5).joinToString()}")
+                true
+            } else {
+                Log.w(TAG, "CMVN file parsed but missing AddShift or Rescale")
+                false
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to load CMVN: ${e.message}")
+            false
+        }
+    }
+
+    /**
+     * Extract LFR-stacked fbank features with CMVN normalization from raw audio.
+     * Matches the Python WavFrontend pipeline:
+     *   1. Scale audio by 32768 (upsacle_samples)
+     *   2. Compute mel fbank features
+     *   3. Apply LFR stacking with left-padding
+     *   4. Apply CMVN normalization: (feature + addShift) * rescale
+     *
      * Returns: features array [num_lfr_frames, lfr_m * nMels]
      */
     fun extract(audio: FloatArray): Pair<Array<FloatArray>, Int> {
-        val frames = frameAudio(audio)
+        // Scale audio by 32768 to match Python upsacle_samples
+        val scaledAudio = FloatArray(audio.size) { audio[it] * AUDIO_SCALE }
+
+        val frames = frameAudio(scaledAudio)
         if (frames.isEmpty()) {
             return Pair(emptyArray(), 0)
         }
@@ -105,16 +187,49 @@ class FeatureExtractor(
             }
         }
 
-        // LFR stacking: stack lfrM frames, shift by lfrN
+        // LFR stacking with left-padding to match Python WavFrontend.apply_lfr
+        // Python prepends (lfr_m - 1) // 2 copies of the first frame as left context
+        val leftPad = (lfrM - 1) / 2
+        val paddedFeatures = mutableListOf<FloatArray>()
+        // Add left padding: repeat first frame
+        repeat(leftPad) { paddedFeatures.add(fbankFeatures[0].copyOf()) }
+        paddedFeatures.addAll(fbankFeatures)
+
+        // Compute number of LFR frames: ceil(T_original / lfr_n)
+        val T = fbankFeatures.size
+        val T_lfr = ceil(T.toFloat() / lfrN).toInt()
+
         val lfrFeatures = mutableListOf<FloatArray>()
-        var i = 0
-        while (i + lfrM <= fbankFeatures.size) {
+        for (k in 0 until T_lfr) {
+            val startIdx = k * lfrN
             val stacked = FloatArray(lfrM * nMels)
+
             for (j in 0 until lfrM) {
-                System.arraycopy(fbankFeatures[i + j], 0, stacked, j * nMels, nMels)
+                val srcIdx = startIdx + j
+                if (srcIdx < paddedFeatures.size) {
+                    System.arraycopy(paddedFeatures[srcIdx], 0, stacked, j * nMels, nMels)
+                } else {
+                    // Right-pad with last frame (matches Python behavior)
+                    System.arraycopy(paddedFeatures.last(), 0, stacked, j * nMels, nMels)
+                }
             }
             lfrFeatures.add(stacked)
-            i += lfrN
+        }
+
+        // Apply CMVN normalization: (feature + addShift) * rescale
+        if (cmvnLoaded && cmvnAddShift != null && cmvnRescale != null) {
+            val addShift = cmvnAddShift!!
+            val rescale = cmvnRescale!!
+            val featDim = lfrM * nMels
+            if (addShift.size >= featDim && rescale.size >= featDim) {
+                for (frame in lfrFeatures) {
+                    for (d in 0 until featDim) {
+                        frame[d] = (frame[d] + addShift[d]) * rescale[d]
+                    }
+                }
+            } else {
+                Log.w(TAG, "CMVN dims mismatch: addShift=${addShift.size}, rescale=${rescale.size}, expected=$featDim")
+            }
         }
 
         return Pair(lfrFeatures.toTypedArray(), lfrFeatures.size)

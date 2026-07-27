@@ -77,7 +77,9 @@ class OnnxInference(private val context: Context) {
             }
             session = environment?.createSession(modelPath, options)
 
-            featureExtractor = FeatureExtractor()
+            featureExtractor = FeatureExtractor().apply {
+                loadCmvn(context)
+            }
             tokenizer = Tokenizer(context)
             tokenizer?.load()
 
@@ -118,7 +120,7 @@ class OnnxInference(private val context: Context) {
             val sess = session ?: return ""
             val env = environment ?: return ""
 
-            val (features, featLen) = extractor.extract(audio)
+            val (features, _) = extractor.extract(audio)
             if (features.isEmpty()) return ""
 
             val numFrames = features.size

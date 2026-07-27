@@ -56,9 +56,10 @@ class TranscriptionTest {
 
         Log.i(TAG, "=== Test: Sine wave (${duration}s, $numSamples samples) ===")
 
-        // Run feature extraction
-        val extractor = FeatureExtractor()
-        val (features, featLen) = extractor.extract(audio)
+        // Run feature extraction (standalone, with CMVN for accurate logging)
+        val extractor = FeatureExtractor().apply { loadCmvn(context) }
+        val (features, _) = extractor.extract(audio)
+        val featLen = features.size
         Log.i(TAG, "Feature extraction: $featLen frames, dim=${if (features.isNotEmpty()) features[0].size else 0}")
 
         if (features.isEmpty()) {
@@ -94,9 +95,9 @@ class TranscriptionTest {
 
         Log.i(TAG, "=== Test: Short audio (0.6s, $numSamples samples) ===")
 
-        val extractor = FeatureExtractor()
-        val (features, featLen) = extractor.extract(audio)
-        Log.i(TAG, "Feature extraction: $featLen frames")
+        val extractor = FeatureExtractor().apply { loadCmvn(context) }
+        val (features, _) = extractor.extract(audio)
+        Log.i(TAG, "Feature extraction: ${features.size} frames")
 
         val result = onnxInference.transcribe(audio)
         Log.i(TAG, "Result: '$result'")
@@ -114,9 +115,9 @@ class TranscriptionTest {
 
         Log.i(TAG, "=== Test: Zero audio (1s, $numSamples samples) ===")
 
-        val extractor = FeatureExtractor()
-        val (features, featLen) = extractor.extract(audio)
-        Log.i(TAG, "Feature extraction: $featLen frames")
+        val extractor = FeatureExtractor().apply { loadCmvn(context) }
+        val (features, _) = extractor.extract(audio)
+        Log.i(TAG, "Feature extraction: ${features.size} frames")
 
         if (features.isEmpty()) {
             Log.e(TAG, "FAIL: Zero audio features empty!")
