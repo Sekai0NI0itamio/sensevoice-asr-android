@@ -79,13 +79,7 @@ jobs:
             cat logcat_errors.txt
 
             echo "=== Checking for crash ==="
-            if adb shell pidof com.example.sensevoiceasr; then
-              echo "APP IS RUNNING - model loaded successfully"
-            else
-              echo "APP CRASHED - checking logs for cause"
-              adb logcat -d -v time | grep -A 20 "FATAL\|AndroidRuntime" > crash_log.txt
-              cat crash_log.txt
-            fi
+            adb shell pidof com.example.sensevoiceasr && echo "APP IS RUNNING - model loaded successfully" || { echo "APP CRASHED - checking logs for cause"; adb logcat -d -v time | grep -A 20 "FATAL\|AndroidRuntime" > crash_log.txt; cat crash_log.txt; }
 
       - name: Upload logcat
         if: always()
