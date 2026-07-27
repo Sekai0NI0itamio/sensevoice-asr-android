@@ -7,17 +7,17 @@ import ai.onnxruntime.OrtException
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.FloatBuffer
-import java.nio.LongBuffer
+import java.nio.IntBuffer
 
 /**
  * ONNX Runtime inference wrapper for SenseVoiceSmall.
  * Loads model from internal storage (copied from assets on first run)
- * for memory-mapped file access instead of loading entire 232MB into RAM.
+ * for memory-mapped file access instead of loading entire 133MB into RAM.
  */
 class OnnxInference(private val context: Context) {
     companion object {
         private const val TAG = "OnnxInference"
-        private const val MODEL_FILE = "model_quant.onnx"
+        private const val MODEL_FILE = "model_int4.onnx"
     }
 
     private var session: OrtSession? = null
@@ -131,9 +131,9 @@ class OnnxInference(private val context: Context) {
             val speechShape = longArrayOf(1, numFrames.toLong(), featDim.toLong())
             val speechTensor = OnnxTensor.createTensor(env, FloatBuffer.wrap(flatFeatures), speechShape)
 
-            val speechLengths = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(numFrames.toLong())), longArrayOf(1))
-            val language = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(0)), longArrayOf(1))
-            val textnorm = OnnxTensor.createTensor(env, LongBuffer.wrap(longArrayOf(1)), longArrayOf(1))
+            val speechLengths = OnnxTensor.createTensor(env, IntBuffer.wrap(intArrayOf(numFrames)), longArrayOf(1))
+            val language = OnnxTensor.createTensor(env, IntBuffer.wrap(intArrayOf(0)), longArrayOf(1))
+            val textnorm = OnnxTensor.createTensor(env, IntBuffer.wrap(intArrayOf(1)), longArrayOf(1))
 
             val inputs = mapOf(
                 "speech" to speechTensor,
