@@ -12,9 +12,10 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.*
+import kotlinx.coroutines.flow.collectLatest
 import com.example.sensevoiceasr.audio.AudioRecorder
 import com.example.sensevoiceasr.audio.VadProcessor
-import kotlinx.coroutines.*
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -50,24 +51,26 @@ class MainActivity : AppCompatActivity() {
         // ViewModel survives activity recreation (permission dialogs, rotations)
         viewModel = ViewModelProvider(this)[AsrViewModel::class.java]
 
-        // Observe model state
-        viewModel.modelState.observe(this) { state ->
-            when (state) {
-                is AsrViewModel.ModelState.Loading -> {
-                    updateStatus("Loading model...")
-                    btnRecord.isEnabled = false
-                    btnRecord.text = "Loading..."
-                }
-                is AsrViewModel.ModelState.Ready -> {
-                    updateStatus("Ready")
-                    btnRecord.isEnabled = true
-                    btnRecord.text = "Hold to\nRecord"
-                }
-                is AsrViewModel.ModelState.Error -> {
-                    updateStatus(state.message)
-                    btnRecord.isEnabled = false
-                    btnRecord.text = "Error"
-                    Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
+        // Observe model state (StateFlow via coroutine)
+        lifecycleScope.launch {
+            viewModel.modelState.collectLatest { state ->
+                when (state) {
+                    is AsrViewModel.ModelState.Loading -> {
+                        updateStatus("Loading model...")
+                        btnRecord.isEnabled = false
+                        btnRecord.text = "Loading..."
+                    }
+                    is AsrViewModel.ModelState.Ready -> {
+                        updateStatus("Ready")
+                        btnRecord.isEnabled = true
+                        btnRecord.text = "Hold to\nRecord"
+                    }
+                    is AsrViewModel.ModelState.Error -> {
+                        updateStatus(state.message)
+                        btnRecord.isEnabled = false
+                        btnRecord.text = "Error"
+                        Toast.makeText(this@MainActivity, state.message, Toast.LENGTH_LONG).show()
+                    }
                 }
             }
         }
