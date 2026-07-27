@@ -59,26 +59,116 @@ class OnnxInference(private val context: Context) {
         if (!modelDir.exists()) modelDir.mkdirs()
         val modelFile = File(modelDir, MODEL_FILE)
 
-        if (!modelFile.exists()) {
-            log("Copying model from assets to internal storage...")
+        val files = context.filesDir
+        val cache = context.cacheDir
+        log("========== STORAGE INVENTORY ==========")
+        log("  filesDir  = ${files.absolutePath}")
+        log("  cacheDir  = ${cache.absolutePath}")
+        log("  modelsDir = ${modelDir.absolutePath}")
+        val filesTotal = dirSizeBytes(files)
+        val cacheTotal = dirSizeBytes(cache)
+        val modelsTotal = dirSizeBytes(modelDir)
+        log("  filesDir  total = ${fmtSize(filesTotal)}")
+        log("  cacheDir  total = ${fmtSize(cacheTotal)}")
+        log("  modelsDir total = ${fmtSize(modelsTotal)}")
+
+        var reclaimed = 0L
+        val staleNames = mutableListOf<String>()
+        modelDir.listFiles()?.forEach { f ->
+            if (f.isFile && f.name != MODEL_FILE) {
+                val sz = f.length()
+                if (f.delete()) {
+                    reclaimed += sz
+                    staleNames += "${f.name}(${fmtSize(sz)})"
+                } else {
+                    logWarn("Could not delete stale model file: ${f.absolutePath}")
+                }
+            }
+        }
+        if (staleNames.isNotEmpty()) {
+            log("  STALE FILES DELETED (count=${staleNames.size}, reclaimed ${fmtSize(reclaimed)}):")
+            staleNames.forEach { n -> log("    - $n") }
+        } else {
+            log("  No stale model files found in modelsDir")
+        }
+
+        val assetLen: Long = try {
+            context.assets.openFd(MODEL_FILE).use { fd -> fd.length }
+        } catch (t: Throwable) {
+            logErr("Cannot stat asset $MODEL_FILE: ${t.message}")
+            -1L
+        }
+        log("  Asset $MODEL_FILE declared length = ${fmtSize(assetLen)}")
+
+        val diskLen = if (modelFile.isFile) modelFile.length() else -1L
+        if (modelFile.isFile && assetLen > 0L && diskLen == assetLen) {
+            log("  REUSE on-disk model — size matches asset (${fmtSize(assetLen)})")
+        } else {
+            if (modelFile.isFile) {
+                log("  Model on disk MISMATCH — disk=${fmtSize(diskLen)} vs asset=${fmtSize(assetLen)}, deleting stale copy")
+                modelFile.delete()
+            } else {
+                log("  No on-disk model, copying from asset")
+            }
             val startTime = System.currentTimeMillis()
+            var totalBytes = 0L
             context.assets.open(MODEL_FILE).use { input ->
                 FileOutputStream(modelFile).use { output ->
                     val buffer = ByteArray(8192)
                     var read: Int
-                    var totalBytes = 0L
                     while (input.read(buffer).also { read = it } != -1) {
                         output.write(buffer, 0, read)
                         totalBytes += read
                     }
-                    log("Copied $totalBytes bytes...")
                 }
             }
-            log("Model copied in ${System.currentTimeMillis() - startTime}ms (${modelFile.length() / (1024 * 1024)}MB on disk)")
-        } else {
-            log("Model already exists at ${modelFile.absolutePath} (${modelFile.length() / (1024 * 1024)}MB)")
+            val fsLen = modelFile.length()
+            log("  Copied ${fmtSize(totalBytes)} from asset -> disk in ${System.currentTimeMillis() - startTime}ms")
+            if (fsLen != assetLen || fsLen != totalBytes) {
+                logErr("  SIZE MISMATCH after copy! asset=${fmtSize(assetLen)} copied=${fmtSize(totalBytes)} disk=${fmtSize(fsLen)}")
+            } else {
+                log("  Size verified OK (asset==copied==disk = ${fmtSize(fsLen)})")
+            }
         }
+
+        val filesAfter = dirSizeBytes(context.filesDir)
+        val cacheAfter = dirSizeBytes(context.cacheDir)
+        val modelsAfter = dirSizeBytes(modelDir)
+        log("========== STORAGE AFTER ==========")
+        log("  filesDir  total = ${fmtSize(filesAfter)}  Δ${fmtSigned(filesAfter - filesTotal)}")
+        log("  cacheDir  total = ${fmtSize(cacheAfter)}  Δ${fmtSigned(cacheAfter - cacheTotal)}")
+        log("  modelsDir total = ${fmtSize(modelsAfter)}  Δ${fmtSigned(modelsAfter - modelsTotal)}")
+        log("  Model location : ${modelFile.absolutePath}  size=${fmtSize(modelFile.length())}")
         return modelFile
+    }
+
+    private fun dirSizeBytes(dir: File?): Long {
+        if (dir == null || !dir.exists()) return 0L
+        var total = 0L
+        if (dir.isFile) return dir.length()
+        dir.listFiles()?.forEach { f ->
+            total += if (f.isFile) f.length() else dirSizeBytes(f)
+        }
+        return total
+    }
+
+    private fun fmtSize(bytes: Long): String {
+        return when {
+            bytes < 0L -> "? B"
+            bytes < 1024L -> "$bytes B"
+            bytes < 1024L * 1024L -> "${String.format("%.2f", bytes / 1024.0)} KB"
+            bytes < 1024L * 1024 * 1024 -> "${String.format("%.2f", bytes / (1024.0 * 1024.0))} MB"
+            else -> "${String.format("%.2f", bytes / (1024.0 * 1024.0 * 1024.0))} GB"
+        }
+    }
+
+    private fun fmtSigned(bytes: Long): String {
+        val sign = when {
+            bytes > 0 -> "+"
+            bytes < 0 -> "-"
+            else -> "±"
+        }
+        return "$sign${fmtSize(kotlin.math.abs(bytes))}"
     }
 
     fun loadModel(): Boolean {
