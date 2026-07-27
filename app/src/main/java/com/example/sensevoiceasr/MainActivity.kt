@@ -3,48 +3,40 @@ package com.example.sensevoiceasr
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
-import android.util.Log
 import android.view.MotionEvent
 import android.widget.Button
-import android.widget.EditText
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.lifecycleScope
 import com.example.sensevoiceasr.audio.AudioRecorder
+import com.example.sensevoiceasr.audio.VadProcessor
 import kotlinx.coroutines.*
-import okhttp3.*
-import org.json.JSONObject
 import java.text.SimpleDateFormat
 import java.util.*
-import java.util.concurrent.TimeUnit
 
 class MainActivity : AppCompatActivity() {
     companion object {
         private const val PERMISSION_REQUEST_CODE = 1001
-        private const val PREFS_NAME = "sensevoice_prefs"
-        private const val KEY_SERVER_URL = "server_url"
-        private const val DEFAULT_URL = "wss://lauren-incident-contract-prepaid.trycloudflare.com"
     }
 
     private lateinit var btnRecord: Button
     private lateinit var btnClear: Button
-    private lateinit var btnConnect: Button
+    private lateinit var transcriptText: TextView
     private lateinit var statusText: TextView
-    private lateinit var serverUrlInput: EditText
-    private lateinit var transcriptContainer: android.widget.LinearLayout
 
     private var audioRecorder: AudioRecorder? = null
-    private var webSocket: WebSocket? = null
-    private var okHttpClient: OkHttpClient? = null
+    private var vadProcessor: VadProcessor? = null
 
     private var recordingJob: Job? = null
     private var isRecording = false
-    private var isConnected = false
 
     private val timeFormat = SimpleDateFormat("HH:mm:ss.SSS", Locale.getDefault())
+
+    private lateinit var viewModel: AsrViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,21 +44,31 @@ class MainActivity : AppCompatActivity() {
 
         btnRecord = findViewById(R.id.btn_record)
         btnClear = findViewById(R.id.btn_clear)
-        btnConnect = findViewById(R.id.btn_connect)
+        transcriptText = findViewById(R.id.transcript_text)
         statusText = findViewById(R.id.status)
-        serverUrlInput = findViewById(R.id.server_url)
-        transcriptContainer = findViewById(R.id.transcript_container)
 
-        // Load saved server URL
-        val prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE)
-        serverUrlInput.setText(prefs.getString(KEY_SERVER_URL, DEFAULT_URL))
+        // ViewModel survives activity recreation (permission dialogs, rotations)
+        viewModel = ViewModelProvider(this)[AsrViewModel::class.java]
 
-        // Connect button
-        btnConnect.setOnClickListener {
-            val url = serverUrlInput.text.toString().trim()
-            if (url.isNotEmpty()) {
-                prefs.edit().putString(KEY_SERVER_URL, url).apply()
-                connectToServer(url)
+        // Observe model state
+        viewModel.modelState.observe(this) { state ->
+            when (state) {
+                is AsrViewModel.ModelState.Loading -> {
+                    updateStatus("Loading model...")
+                    btnRecord.isEnabled = false
+                    btnRecord.text = "Loading..."
+                }
+                is AsrViewModel.ModelState.Ready -> {
+                    updateStatus("Ready")
+                    btnRecord.isEnabled = true
+                    btnRecord.text = "Hold to\nRecord"
+                }
+                is AsrViewModel.ModelState.Error -> {
+                    updateStatus(state.message)
+                    btnRecord.isEnabled = false
+                    btnRecord.text = "Error"
+                    Toast.makeText(this, state.message, Toast.LENGTH_LONG).show()
+                }
             }
         }
 
@@ -74,8 +76,8 @@ class MainActivity : AppCompatActivity() {
         btnRecord.setOnTouchListener { _, event ->
             when (event.action) {
                 MotionEvent.ACTION_DOWN -> {
-                    if (!isConnected) {
-                        Toast.makeText(this, "Not connected to server", Toast.LENGTH_SHORT).show()
+                    if (!viewModel.isModelReady) {
+                        Toast.makeText(this, "Model not ready yet", Toast.LENGTH_SHORT).show()
                         return@setOnTouchListener false
                     }
                     startRecording()
@@ -91,86 +93,9 @@ class MainActivity : AppCompatActivity() {
 
         // Clear button
         btnClear.setOnClickListener {
-            transcriptContainer.removeAllViews()
-            partialView = null
+            transcriptText.text = ""
             statusText.text = "Cleared"
         }
-
-        // Auto-connect on launch
-        val savedUrl = prefs.getString(KEY_SERVER_URL, DEFAULT_URL) ?: DEFAULT_URL
-        connectToServer(savedUrl)
-    }
-
-    private fun connectToServer(url: String) {
-        updateStatus("Connecting...")
-        btnConnect.text = "..."
-
-        // Close existing connection
-        webSocket?.close(1000, "Reconnecting")
-
-        okHttpClient = OkHttpClient.Builder()
-            .readTimeout(0, TimeUnit.MILLISECONDS)
-            .build()
-
-        val request = Request.Builder().url(url).build()
-        webSocket = okHttpClient?.newWebSocket(request, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                isConnected = true
-                runOnUiThread {
-                    updateStatus("Connected")
-                    btnConnect.text = "Connected"
-                    btnConnect.setBackgroundColor(getColor(R.color.connect_green))
-                }
-            }
-
-            override fun onMessage(webSocket: WebSocket, text: String) {
-                try {
-                    val msg = JSONObject(text)
-                    val type = msg.optString("type")
-                    when (type) {
-                        "partial" -> {
-                            val partialText = msg.optString("text", "")
-                            runOnUiThread { showPartial(partialText) }
-                        }
-                        "final" -> {
-                            val finalText = msg.optString("text", "")
-                            val timestamp = msg.optString("timestamp", "")
-                            val duration = msg.optDouble("duration", 0.0)
-                            val inferenceMs = msg.optDouble("inference_ms", 0.0)
-                            runOnUiThread {
-                                clearPartial()
-                                appendTranscript(finalText, timestamp, duration, inferenceMs)
-                            }
-                        }
-                        "status" -> {
-                            val statusMsg = msg.optString("text", "")
-                            runOnUiThread { updateStatus(statusMsg) }
-                        }
-                    }
-                } catch (e: Exception) {
-                    Log.e("MainActivity", "Parse error", e)
-                }
-            }
-
-            override fun onClosing(webSocket: WebSocket, code: Int, reason: String) {
-                webSocket.close(1000, null)
-                isConnected = false
-                runOnUiThread {
-                    updateStatus("Disconnected")
-                    btnConnect.text = "Connect"
-                    btnConnect.setBackgroundColor(getColor(R.color.button_clear))
-                }
-            }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                isConnected = false
-                runOnUiThread {
-                    updateStatus("Connection failed: ${t.message}")
-                    btnConnect.text = "Retry"
-                    btnConnect.setBackgroundColor(getColor(R.color.record_red))
-                }
-            }
-        })
     }
 
     private fun startRecording() {
@@ -187,6 +112,27 @@ class MainActivity : AppCompatActivity() {
         updateStatus("Recording...")
 
         audioRecorder = AudioRecorder(chunkMs = 200)
+        vadProcessor = VadProcessor(
+            sampleRate = 16000,
+            speechThreshold = 0.01f,
+            silenceFrames = 8,
+            minSpeechFrames = 3
+        )
+
+        vadProcessor?.onSegmentFinalized { audio, duration ->
+            lifecycleScope.launch(Dispatchers.IO) {
+                val startTime = System.currentTimeMillis()
+                val text = viewModel.transcribe(audio)
+                val inferenceTime = System.currentTimeMillis() - startTime
+
+                if (text.isNotBlank()) {
+                    withContext(Dispatchers.Main) {
+                        appendTranscript(text, duration, inferenceTime)
+                    }
+                }
+            }
+        }
+
         val started = audioRecorder?.start() ?: false
         if (!started) {
             isRecording = false
@@ -197,12 +143,10 @@ class MainActivity : AppCompatActivity() {
 
         recordingJob = lifecycleScope.launch(Dispatchers.IO) {
             val recorder = audioRecorder ?: return@launch
-            recorder.audioChunks.collect { floatBytes ->
+            val vad = vadProcessor ?: return@launch
+            recorder.audioChunks.collect { chunk ->
                 if (!isRecording) return@collect
-                val ws = webSocket
-                if (ws != null && isConnected) {
-                    ws.send(okio.ByteString.of(*floatBytes))
-                }
+                vad.processChunk(chunk)
             }
         }
     }
@@ -214,58 +158,39 @@ class MainActivity : AppCompatActivity() {
         recordingJob?.cancel()
         recordingJob = null
 
+        val vad = vadProcessor
+        lifecycleScope.launch(Dispatchers.IO) {
+            vad?.flushSegment()
+        }
+
         audioRecorder?.stop()
         audioRecorder = null
+        vadProcessor = null
 
         resetRecordButton()
-        updateStatus("Connected")
+        updateStatus("Ready")
     }
 
-    private var partialView: TextView? = null
-
-    private fun showPartial(text: String) {
-        if (partialView == null) {
-            partialView = TextView(this).apply {
-                setTextColor(getColor(R.color.partial_blue))
-                textSize = 15f
-                setPadding(16, 4, 16, 8)
-            }
-            transcriptContainer.addView(partialView)
+    private fun appendTranscript(text: String, durationSec: Float, inferenceTimeMs: Long) {
+        val timestamp = timeFormat.format(Date())
+        val currentText = transcriptText.text.toString()
+        val newEntry = if (currentText.isEmpty()) {
+            "[$timestamp] $text  (${"%.1f".format(durationSec)}s, ${inferenceTimeMs}ms)"
+        } else {
+            "\n\n[$timestamp] $text  (${"%.1f".format(durationSec)}s, ${inferenceTimeMs}ms)"
         }
-        partialView?.text = "... $text"
-    }
+        transcriptText.append(newEntry)
 
-    private fun clearPartial() {
-        partialView?.let {
-            transcriptContainer.removeView(it)
-        }
-        partialView = null
-    }
-
-    private fun appendTranscript(transcriptText: String, timestamp: String, durationSec: Double, inferenceTimeMs: Double) {
-        val entry = TextView(this).apply {
-            setTextColor(getColor(R.color.text_primary))
-            textSize = 14f
-            setPadding(16, 6, 16, 2)
-            text = "[$timestamp] $transcriptText"
-        }
-        val meta = TextView(this).apply {
-            setTextColor(getColor(R.color.text_secondary))
-            textSize = 11f
-            setPadding(16, 0, 16, 10)
-            text = "${"%.1f".format(durationSec)}s · ${"%.0f".format(inferenceTimeMs)}ms"
-        }
-        transcriptContainer.addView(entry)
-        transcriptContainer.addView(meta)
-
-        // Auto-scroll
-        findViewById<android.widget.ScrollView>(R.id.scroll_view).post {
-            findViewById<android.widget.ScrollView>(R.id.scroll_view).fullScroll(android.view.View.FOCUS_DOWN)
+        transcriptText.post {
+            val scrollView = findViewById<android.widget.ScrollView>(R.id.scroll_view)
+            scrollView.fullScroll(android.view.View.FOCUS_DOWN)
         }
     }
 
     private fun updateStatus(msg: String) {
-        runOnUiThread { statusText.text = msg }
+        runOnUiThread {
+            statusText.text = msg
+        }
     }
 
     private fun resetRecordButton() {
@@ -307,7 +232,5 @@ class MainActivity : AppCompatActivity() {
         super.onDestroy()
         recordingJob?.cancel()
         audioRecorder?.release()
-        webSocket?.close(1000, "App closed")
-        okHttpClient?.dispatcher?.executorService?.shutdown()
     }
 }

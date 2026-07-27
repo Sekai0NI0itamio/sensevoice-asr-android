@@ -7,15 +7,15 @@ import android.util.Log
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
 
 /**
  * Captures 16kHz mono PCM audio from the device microphone.
- * Emits audio chunks as Float32 ByteArrays (ready for WebSocket send).
+ * Emits audio chunks as ShortArrays via a SharedFlow.
  */
 class AudioRecorder(
     private val sampleRate: Int = 16000,
+    private val channelConfig: Int = AudioFormat.CHANNEL_IN_MONO,
+    private val audioFormat: Int = AudioFormat.ENCODING_PCM_16BIT,
     private val chunkMs: Int = 200
 ) {
     companion object {
@@ -26,16 +26,13 @@ class AudioRecorder(
     private var recordingJob: Job? = null
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
-    private val _audioChunks = MutableSharedFlow<ByteArray>(replay = 0, extraBufferCapacity = 64)
-    val audioChunks: SharedFlow<ByteArray> = _audioChunks
+    private val _audioChunks = MutableSharedFlow<ShortArray>(replay = 0, extraBufferCapacity = 64)
+    val audioChunks: SharedFlow<ShortArray> = _audioChunks
+
+    private val bufferSize: Int get() = AudioRecord.getMinBufferSize(sampleRate, channelConfig, audioFormat)
+        .coerceAtLeast(sampleRate * chunkMs / 1000 * 2) // 2 bytes per sample
 
     val chunkSamples: Int get() = sampleRate * chunkMs / 1000
-
-    private val bufferSize: Int get() = AudioRecord.getMinBufferSize(
-        sampleRate,
-        AudioFormat.CHANNEL_IN_MONO,
-        AudioFormat.ENCODING_PCM_16BIT
-    ).coerceAtLeast(chunkSamples * 2)
 
     fun start(): Boolean {
         if (audioRecord != null) {
@@ -47,8 +44,8 @@ class AudioRecorder(
             audioRecord = AudioRecord(
                 MediaRecorder.AudioSource.MIC,
                 sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
+                channelConfig,
+                audioFormat,
                 bufferSize
             )
 
@@ -60,21 +57,19 @@ class AudioRecorder(
             }
 
             audioRecord?.startRecording()
-            Log.i(TAG, "Recording started: ${sampleRate}Hz, ${chunkMs}ms chunks")
+            Log.i(TAG, "Recording started: ${sampleRate}Hz, ${chunkMs}ms chunks, buffer=$bufferSize")
 
             recordingJob = scope.launch {
-                val shortBuffer = ShortArray(chunkSamples)
+                val buffer = ShortArray(chunkSamples)
                 while (isActive) {
-                    val read = audioRecord?.read(shortBuffer, 0, chunkSamples) ?: -1
+                    val read = audioRecord?.read(buffer, 0, chunkSamples) ?: -1
                     if (read > 0) {
-                        // Convert Int16 to Float32 for the server
-                        val floatBytes = ByteBuffer.allocate(read * 4).apply {
-                            order(ByteOrder.LITTLE_ENDIAN)
-                            for (i in 0 until read) {
-                                putFloat(shortBuffer[i] / 32768f)
-                            }
-                        }.array()
-                        _audioChunks.emit(floatBytes)
+                        val chunk = if (read == chunkSamples) {
+                            buffer.copyOf()
+                        } else {
+                            buffer.copyOf(read)
+                        }
+                        _audioChunks.emit(chunk)
                     } else if (read < 0) {
                         Log.e(TAG, "AudioRecord read error: $read")
                         break
@@ -107,6 +102,8 @@ class AudioRecorder(
         audioRecord = null
         Log.i(TAG, "Recording stopped")
     }
+
+    fun isRecording(): Boolean = audioRecord?.recordingState == AudioRecord.RECORDSTATE_RECORDING
 
     fun release() {
         stop()
