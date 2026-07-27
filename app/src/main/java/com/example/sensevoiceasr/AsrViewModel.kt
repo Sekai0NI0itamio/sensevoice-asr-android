@@ -49,8 +49,9 @@ class AsrViewModel(application: Application) : AndroidViewModel(application) {
                     _modelState.value = ModelState.Ready
                     Log.i(TAG, "Model ready")
                 } else {
-                    _modelState.value = ModelState.Error("Model load failed")
-                    Log.e(TAG, "Model load returned false")
+                    val errMsg = inference.lastError ?: "Model load failed (unknown error)"
+                    _modelState.value = ModelState.Error(errMsg)
+                    Log.e(TAG, "Model load failed: $errMsg")
                 }
             } catch (e: OutOfMemoryError) {
                 Log.e(TAG, "Out of memory: ${e.message}")

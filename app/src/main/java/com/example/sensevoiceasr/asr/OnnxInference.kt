@@ -3,6 +3,7 @@ package com.example.sensevoiceasr.asr
 import android.content.Context
 import android.util.Log
 import ai.onnxruntime.*
+import ai.onnxruntime.OrtException
 import java.io.File
 import java.io.FileOutputStream
 import java.nio.FloatBuffer
@@ -26,6 +27,10 @@ class OnnxInference(private val context: Context) {
 
     @Volatile
     var isLoaded = false
+        private set
+
+    @Volatile
+    var lastError: String? = null
         private set
 
     /**
@@ -81,11 +86,21 @@ class OnnxInference(private val context: Context) {
             Log.i(TAG, "Model loaded in ${loadTime}ms")
             true
         } catch (e: OutOfMemoryError) {
-            Log.e(TAG, "Out of memory loading model: ${e.message}")
+            val msg = "Out of memory: ${e.message}"
+            Log.e(TAG, msg)
+            lastError = msg
+            isLoaded = false
+            false
+        } catch (e: OrtException) {
+            val msg = "ONNX error: ${e.message}"
+            Log.e(TAG, msg, e)
+            lastError = msg
             isLoaded = false
             false
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to load model: ${e.message}", e)
+            val msg = "Failed: ${e.message}"
+            Log.e(TAG, msg, e)
+            lastError = msg
             isLoaded = false
             false
         }
