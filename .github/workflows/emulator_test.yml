@@ -6,6 +6,7 @@ on:
     branches: [main]
     paths:
       - 'app/src/main/java/com/example/sensevoiceasr/**'
+      - 'app/src/androidTest/java/com/example/sensevoiceasr/**'
       - '.github/workflows/emulator_test.yml'
 
 jobs:
@@ -42,7 +43,7 @@ jobs:
         run: echo "$DEBUG_KEYSTORE_B64" | base64 -d > debug.keystore
 
       - name: Build debug APK
-        run: ./gradlew assembleDebug --stacktrace
+        run: ./gradlew assembleDebug assembleDebugAndroidTest --stacktrace
 
       - name: Run emulator test
         uses: reactivecircus/android-emulator-runner@v2
@@ -62,6 +63,7 @@ jobs:
 
             echo "=== Installing APK ==="
             adb install -r app/build/outputs/apk/debug/app-debug.apk
+            adb install -r app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
             sleep 2
 
             echo "=== Granting permissions ==="
@@ -86,6 +88,16 @@ jobs:
             echo "=== Checking for crash ==="
             adb shell pidof com.example.sensevoiceasr && echo "APP IS RUNNING - model loaded successfully" || { echo "APP CRASHED - checking logs for cause"; adb logcat -d -v time | grep -A 20 "FATAL\|AndroidRuntime" > crash_log.txt; cat crash_log.txt; }
 
+            echo "=== Clearing logcat for instrumentation test ==="
+            adb logcat -c
+
+            echo "=== Running transcription instrumentation tests ==="
+            adb shell am instrument -w -r -e class com.example.sensevoiceasr.TranscriptionTest com.example.sensevoiceasr.test/androidx.test.runner.AndroidJUnitRunner 2>&1 | tee instrumentation_output.txt
+
+            echo "=== Capturing transcription test logcat ==="
+            adb logcat -d -v time | grep -iE "(TranscriptionTest|OnnxInference|FeatureExtractor|Tokenizer|onnxruntime|FAIL|PASS|Result)" > transcription_logcat.txt
+            cat transcription_logcat.txt
+
       - name: Upload logcat
         if: always()
         uses: actions/upload-artifact@v4
@@ -95,6 +107,8 @@ jobs:
             logcat_filtered.txt
             logcat_errors.txt
             crash_log.txt
+            instrumentation_output.txt
+            transcription_logcat.txt
           retention-days: 7
 
       - name: Upload APK
