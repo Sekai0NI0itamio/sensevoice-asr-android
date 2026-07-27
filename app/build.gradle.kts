@@ -50,13 +50,15 @@ dependencies {
 
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
-    implementation("androidx.lifecycle:lifecycle-viewmodel-ktx:2.7.0")
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.7.3")
 
-    // ONNX Runtime Mobile (lightweight CPU inference)
-    implementation("com.microsoft.onnxruntime:onnxruntime-android:1.17.1")
+    // OkHttp for WebSocket
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    // JSON
+    implementation("org.json:json:20231013")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

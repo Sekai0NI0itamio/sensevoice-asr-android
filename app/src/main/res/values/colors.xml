@@ -1,13 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="primary">#FF6200EE</color>
-    <color name="primary_dark">#FF3700B3</color>
-    <color name="accent">#FF03DAC5</color>
-    <color name="background">#FF1E1E2E</color>
-    <color name="surface">#FF2D2D3F</color>
-    <color name="text_primary">#FFFFFFFF</color>
-    <color name="text_secondary">#FFB0B0C0</color>
-    <color name="record_red">#FFE53935</color>
-    <color name="record_red_dark">#FFB71C1C</color>
-    <color name="button_clear">#FF424256</color>
+    <color name="background">#1E1E2E</color>
+    <color name="text_primary">#FFFFFF</color>
+    <color name="text_secondary">#888888</color>
+    <color name="record_red">#E53935</color>
+    <color name="record_red_dark">#B71C1C</color>
+    <color name="button_clear">#424256</color>
+    <color name="connect_green">#4CAF50</color>
+    <color name="partial_blue">#4FC3F7</color>
 </resources>
