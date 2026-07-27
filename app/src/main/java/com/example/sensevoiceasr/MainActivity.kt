@@ -3,6 +3,7 @@ package com.example.sensevoiceasr
 import android.Manifest
 import android.content.pm.PackageManager
 import android.os.Bundle
+import android.util.Log
 import android.view.MotionEvent
 import android.widget.Button
 import android.widget.EditText
@@ -241,12 +242,12 @@ class MainActivity : AppCompatActivity() {
         partialView = null
     }
 
-    private fun appendTranscript(text: String, timestamp: String, durationSec: Double, inferenceTimeMs: Double) {
+    private fun appendTranscript(transcriptText: String, timestamp: String, durationSec: Double, inferenceTimeMs: Double) {
         val entry = TextView(this).apply {
             setTextColor(getColor(R.color.text_primary))
             textSize = 14f
             setPadding(16, 6, 16, 2)
-            text = "[$timestamp] $text"
+            text = "[$timestamp] $transcriptText"
         }
         val meta = TextView(this).apply {
             setTextColor(getColor(R.color.text_secondary))
