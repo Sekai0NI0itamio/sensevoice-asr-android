@@ -145,6 +145,8 @@ class OnnxInference(private val context: Context) {
             val outputs = sess.run(inputs)
             val outputEntry = outputs.iterator().next()
             val outputTensor = outputEntry.value as? OnnxTensor ?: return ""
+            val outputInfo = outputTensor.info
+            Log.i(TAG, "Output tensor: name=${outputEntry.key}, type=${outputInfo.type}, shape=${outputInfo.shape?.contentToString()}")
             val rawValue = outputTensor.value
 
             val tokenIds = when (rawValue) {
@@ -164,11 +166,18 @@ class OnnxInference(private val context: Context) {
                             maxIdx
                         }
                     } else {
+                        Log.w(TAG, "Output is Array but empty or not 2D, size=${rawValue.size}")
                         IntArray(0)
                     }
                 }
-                else -> IntArray(0)
+                else -> {
+                    Log.w(TAG, "Unexpected output type: ${rawValue.javaClass.name}")
+                    IntArray(0)
+                }
             }
+
+            Log.i(TAG, "Token IDs (first 20): ${tokenIds.take(20).joinToString()}")
+            Log.i(TAG, "Token IDs unique count: ${tokenIds.toSet().size}, all-zero: ${tokenIds.all { it == 0 }}")
 
             val result = tokenizer?.decode(tokenIds) ?: ""
 
