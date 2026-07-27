@@ -10,12 +10,15 @@ import kotlin.math.*
  */
 class VadProcessor(
     private val sampleRate: Int = 16000,
-    private val speechThreshold: Float = 0.01f,
+    private val speechThreshold: Float = 0.015f,
     private val silenceFrames: Int = 8,
-    private val minSpeechFrames: Int = 3
+    private val minSpeechFrames: Int = 3,
+    private val maxSpeechFrames: Int = 40
 ) {
     companion object {
         private const val TAG = "VadProcessor"
+        private const val AGC_MAX_GAIN = 8.0f
+        private const val AGC_MIN_GAIN = 0.3f
     }
 
     var logCallback: ((String) -> Unit)? = null
@@ -41,9 +44,40 @@ class VadProcessor(
         segmentCallback = callback
     }
 
+    private fun finalizeSegment(reason: String): FloatArray? {
+        if (speechBuffer.isEmpty()) return null
+        log("  <<< Speech segment END ($reason) after $silenceCount silence frames (speechFrames=$speechFrameCount, minRequired=$minSpeechFrames)")
+        var audio: FloatArray? = null
+        if (speechFrameCount >= minSpeechFrames) {
+            val fullAudio = concatenate(speechBuffer)
+            val duration = fullAudio.size.toFloat() / sampleRate
+            val segRms = run {
+                var s = 0.0; for (v in fullAudio) s += (v*v).toDouble(); sqrt(s / fullAudio.size).toFloat()
+            }
+            val segPeak = fullAudio.maxOf { abs(it) }
+            log("  SEGMENT FINALIZED ($reason): ${String.format("%.2f", duration)}s, ${fullAudio.size} samples, " +
+                    "${speechFrameCount} frames, RMS=$segRms, peak=$segPeak. Calling transcribe...")
+            try {
+                segmentCallback?.invoke(fullAudio, duration)
+                log("  segmentCallback returned OK for ${String.format("%.2f", duration)}s segment")
+            } catch (t: Throwable) {
+                Log.e(TAG, "segmentCallback threw", t)
+                logCallback?.invoke("[Vad][ERR] segmentCallback crashed: ${t.javaClass.simpleName}: ${t.message}")
+            }
+            audio = fullAudio
+        } else {
+            log("  SEGMENT DISCARDED: only $speechFrameCount speech frames (< min $minSpeechFrames)")
+        }
+        speechBuffer.clear()
+        speechFrameCount = 0
+        silenceCount = 0
+        return audio
+    }
+
     /**
      * Process an audio chunk. Returns the processed (AGC'd) float audio if speech was detected.
-     * Calls segmentCallback when a speech segment ends.
+     * Calls segmentCallback when a speech segment ends (silence threshold OR max-duration cutoff).
+     * VAD uses rawRMS (before AGC) to avoid AGC-gain-amplified noise being misclassified as speech.
      */
     fun processChunk(rawChunk: ShortArray): FloatArray? {
         chunkCount++
@@ -51,56 +85,46 @@ class VadProcessor(
         // Convert to float [-1, 1]
         val floatAudio = FloatArray(rawChunk.size) { rawChunk[it] / 32768f }
 
-        // Raw RMS before AGC, for VAD decision comparison
+        // Raw RMS before AGC — USE THIS for speech detection (defect fix: don't use post-AGC RMS)
         val rawRms = run {
             var s = 0.0
             for (v in floatAudio) s += (v * v).toDouble()
             sqrt(s / floatAudio.size).toFloat()
         }
 
-        // Apply AGC
+        // Apply AGC — output is still fed to downstream model / feature extraction for normalized input
         val agcAudio = applyAgc(floatAudio)
+        val agcRms = computeRms(agcAudio)
 
-        // Check if this is speech
-        val rms = computeRms(agcAudio)
-        val isSpeech = rms > speechThreshold
+        // VAD decision on rawRMS (NOT AGC-amplified rms)
+        val isSpeech = rawRms >= speechThreshold
 
         // Verbose: log first chunk, then every 5th
         if (chunkCount <= 3 || chunkCount % 5 == 0) {
-            log("Chunk #$chunkCount: rawRMS=$rawRms, agcRMS=$rms, isSpeech=$isSpeech, " +
-                    "silenceCount=$silenceCount/$silenceFrames, speechFrames=$speechFrameCount, " +
-                    "threshold=$speechThreshold, agcGain=$agcGainSmooth")
+            log("Chunk #$chunkCount: rawRMS=$rawRms, agcRMS=$agcRms, isSpeech=$isSpeech " +
+                    "(VAD on rawRMS >= $speechThreshold), " +
+                    "silenceCount=$silenceCount/$silenceFrames, speechFrames=$speechFrameCount/$maxSpeechFrames, " +
+                    "agcGain=$agcGainSmooth (min=$AGC_MIN_GAIN max=$AGC_MAX_GAIN)")
         }
 
         if (isSpeech) {
             if (speechBuffer.isEmpty()) {
-                log("  >>> Speech segment START (chunk #$chunkCount, rms=$rms)")
+                log("  >>> Speech segment START (chunk #$chunkCount, rawRMS=$rawRms, agcRMS=$agcRms)")
             }
             speechBuffer.add(agcAudio)
             silenceCount = 0
             speechFrameCount++
+
+            // Max-duration auto-cutoff: finalize segment after 8s (40 × 200ms) of continuous speech
+            if (speechFrameCount >= maxSpeechFrames && speechBuffer.isNotEmpty()) {
+                log("  MAX-DURATION CUTOFF after $speechFrameCount frames (${String.format("%.1f", speechFrameCount * 0.2f)}s) — finalizing segment + starting fresh buffer")
+                finalizeSegment(reason = "maxDuration ${String.format("%.1f", maxSpeechFrames * 0.2f)}s cutoff")
+            }
             return agcAudio
         } else {
             silenceCount++
             if (speechBuffer.isNotEmpty() && silenceCount >= silenceFrames) {
-                // Finalize segment
-                log("  <<< Speech segment END after $silenceCount silence frames (speechFrames=$speechFrameCount, minRequired=$minSpeechFrames)")
-                if (speechFrameCount >= minSpeechFrames) {
-                    val fullAudio = concatenate(speechBuffer)
-                    val duration = fullAudio.size.toFloat() / sampleRate
-                    // Segment audio stats
-                    val segRms = run {
-                        var s = 0.0; for (v in fullAudio) s += (v*v).toDouble(); sqrt(s / fullAudio.size).toFloat()
-                    }
-                    val segPeak = fullAudio.maxOf { abs(it) }
-                    log("  SEGMENT FINALIZED: ${String.format("%.2f", duration)}s, ${fullAudio.size} samples, " +
-                            "${speechFrameCount} frames, RMS=$segRms, peak=$segPeak. Calling transcribe...")
-                    segmentCallback?.invoke(fullAudio, duration)
-                } else {
-                    log("  SEGMENT DISCARDED: only $speechFrameCount speech frames (< min $minSpeechFrames)")
-                }
-                speechBuffer.clear()
-                speechFrameCount = 0
+                finalizeSegment(reason = "silenceThreshold ${silenceFrames}frames")
             }
             return null
         }
@@ -144,6 +168,9 @@ class VadProcessor(
 
     /**
      * Adaptive AGC with high-pass filter and soft limiter.
+     * Gain range reduced to [0.3×, 8×] to avoid 20× amplification of ambient
+     * room noise which caused VAD misclassification (bug: every silence chunk
+     * passed threshold after AGC).
      */
     private fun applyAgc(audio: FloatArray): FloatArray {
         val output = FloatArray(audio.size)
@@ -162,7 +189,7 @@ class VadProcessor(
         val targetRms = 0.12f
 
         if (rms > 1e-6f) {
-            val gain = (targetRms / rms).coerceIn(0.3f, 20.0f)
+            val gain = (targetRms / rms).coerceIn(AGC_MIN_GAIN, AGC_MAX_GAIN)
             agcGainSmooth = 0.85f * agcGainSmooth + 0.15f * gain
             for (i in output.indices) {
                 output[i] *= agcGainSmooth

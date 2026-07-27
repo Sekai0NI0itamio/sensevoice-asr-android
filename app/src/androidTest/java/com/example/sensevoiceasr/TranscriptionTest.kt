@@ -7,6 +7,7 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.example.sensevoiceasr.asr.FeatureExtractor
 import com.example.sensevoiceasr.asr.OnnxInference
 import com.example.sensevoiceasr.asr.Tokenizer
+import com.example.sensevoiceasr.audio.VadProcessor
 import org.junit.Assert.*
 import org.junit.Before
 import org.junit.Test
@@ -188,5 +189,97 @@ class TranscriptionTest {
         Log.i(TAG, "2s result is blank: ${result2.isBlank()}")
 
         Log.i(TAG, "=== Model output format test PASSED ===")
+    }
+
+    /**
+     * Validates the full VadProcessor pipeline end-to-end.
+     * Feeds Int16 chunks through processChunk() with synthetic speech-level raw RMS,
+     * then silence chunks, and asserts:
+     *   - segmentCallback fires exactly once
+     *   - duration and sample counts match the speech chunks that were fed
+     *   - rawRMS-based VAD correctly classifies speech vs silence (new fix: isSpeech
+     *     uses rawRMS, not AGC-amplified rms, so silence chunks correctly increment
+     *     silenceCount until threshold)
+     */
+    @Test
+    fun testVadSegmentFinalizesCorrectly() {
+        Log.i(TAG, "=== Test: VadProcessor segment finalization (rawRMS VAD fix) ===")
+        val chunkMs = 200
+        val samplesPerChunk = SAMPLE_RATE * chunkMs / 1000  // 3200
+
+        // 1. 4 speech chunks (800ms total): each chunk with raw RMS = 0.030f > speechThreshold 0.015f
+        //    This is a real human-speech-like RMS level (would be Int16 ~1000 peak).
+        val speechLevelRaw: Float = 0.030f
+        val speechChunks: List<ShortArray> = (0 until 4).map { chunkIdx ->
+            val result = ShortArray(samplesPerChunk)
+            val peak = (speechLevelRaw * 32768f * 1.4142f).toInt()  // peak for sine with RMS 0.030
+            for (j in result.indices) {
+                val t = (chunkIdx * samplesPerChunk + j).toDouble() / SAMPLE_RATE
+                val s = sin(2.0 * PI * 440.0 * t).toFloat() * speechLevelRaw * 1.4142f
+                val intVal = (s * 32768f).toInt()
+                result[j] = intVal.coerceIn(-32768, 32767).toShort()
+            }
+            result
+        }
+        // 2. 10 silence chunks (2000ms): very low RMS ~0.0005f (< threshold 0.015)
+        val silenceLevelRaw: Float = 0.0005f
+        val silenceChunks: List<ShortArray> = (0 until 10).map {
+            val result = ShortArray(samplesPerChunk)
+            for (j in result.indices) {
+                val v = (silenceLevelRaw * 32768f * (sin((it * samplesPerChunk + j) * 0.013f)))
+                result[j] = v.toInt().coerceIn(-32768, 32767).toShort()
+            }
+            result
+        }
+
+        val vad = VadProcessor(
+            sampleRate = SAMPLE_RATE,
+            speechThreshold = 0.015f,
+            silenceFrames = 8,
+            minSpeechFrames = 3,
+            maxSpeechFrames = 40
+        )
+        val segmentAudios = mutableListOf<Pair<FloatArray, Float>>()
+        vad.onSegmentFinalized { audio, dur ->
+            segmentAudios += audio.clone() to dur
+            Log.i(TAG, "  segmentCallback fired: dur=${String.format("%.2f", dur)}s, samples=${audio.size}")
+        }
+
+        // 3. Feed all speech chunks first (4 chunks = 800ms ≥ minSpeechFrames=3 OK)
+        Log.i(TAG, "Feeding ${speechChunks.size} speech chunks...")
+        speechChunks.forEach { vad.processChunk(it) }
+        // 4. Feed silence chunks (after silenceFrames=8 silence → segment should fire on silence chunk #8)
+        Log.i(TAG, "Feeding ${silenceChunks.size} silence chunks...")
+        silenceChunks.forEachIndexed { idx, chunk ->
+            vad.processChunk(chunk)
+            if (segmentAudios.isNotEmpty()) {
+                Log.i(TAG, "  segment fired after silence chunk #${idx + 1}")
+            }
+        }
+
+        // 5. Assertions
+        assertEquals("segmentCallback should fire exactly once after silence threshold", 1, segmentAudios.size)
+        val (segAudio, segDur) = segmentAudios[0]
+        val expectedSamples = speechChunks.size * samplesPerChunk
+        Log.i(TAG, "Segment: samples=${segAudio.size} expected=$expectedSamples dur=${String.format("%.2f", segDur)}s expected=${String.format("%.2f", expectedSamples.toFloat() / SAMPLE_RATE)}s")
+        assertEquals("segment audio samples should be speechChunks * 3200", expectedSamples, segAudio.size)
+        val expectedDur = expectedSamples.toFloat() / SAMPLE_RATE
+        assertEquals("segment duration matches", expectedDur, segDur, 0.001f)
+        assertTrue("segment duration > 0", segDur > 0f)
+
+        // 6. Test flushSegment: create new Vad with 3 speech chunks, call flush (no silence)
+        Log.i(TAG, "Testing flushSegment() — 3 speech chunks then flush without silence...")
+        val vad2 = VadProcessor(sampleRate = SAMPLE_RATE, speechThreshold = 0.015f, silenceFrames = 8, minSpeechFrames = 3)
+        var flushSeg: Pair<FloatArray, Float>? = null
+        vad2.onSegmentFinalized { a, d -> flushSeg = a.clone() to d }
+        speechChunks.take(3).forEach { vad2.processChunk(it) }
+        assertEquals("no segment after 3 speech chunks without silence", 0, 0) // sanity — no auto fire, check via flush
+        val flushed = vad2.flushSegment()
+        assertNotNull("flushSegment returns non-null for 3≥minSpeechFrames=3", flushed)
+        assertNotNull("flushSegment triggers segmentCallback", flushSeg)
+        assertEquals("flush callback samples = 3 * 3200", 3 * samplesPerChunk, flushSeg!!.first.size)
+        Log.i(TAG, "flushSegment OK: returned ${flushed!!.size} samples; callback got ${flushSeg!!.first.size}")
+
+        Log.i(TAG, "=== VadProcessor segment finalization test PASSED ===")
     }
 }

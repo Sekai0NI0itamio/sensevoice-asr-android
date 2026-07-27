@@ -176,28 +176,42 @@ class MainActivity : AppCompatActivity() {
         }
         vadProcessor = VadProcessor(
             sampleRate = 16000,
-            speechThreshold = 0.01f,
+            speechThreshold = 0.015f,
             silenceFrames = 8,
-            minSpeechFrames = 3
+            minSpeechFrames = 3,
+            maxSpeechFrames = 40
         ).also {
             it.logCallback = { line -> viewModel.appendLog(line) }
         }
 
+        // Segment callbacks are invoked from processChunk() or flushSegment(), both of which
+        // already run on the IO dispatcher (collect coroutine / flush IO job).  DO NOT launch
+        // an extra nested lifecycleScope here (was silently losing callbacks to lifecycle races).
+        // Call transcribe synchronously from the current IO context; wrap everything in
+        // try/catch so every failure surfaces as a visible UI log line.
         vadProcessor?.onSegmentFinalized { audio, duration ->
-            lifecycleScope.launch(Dispatchers.IO) {
-                viewModel.appendLog("[MainActivity] Got VAD segment: ${String.format("%.2f", duration)}s, ${audio.size} samples")
+            try {
+                viewModel.appendLog("[MainActivity] Got VAD segment: ${String.format("%.2f", duration)}s, ${audio.size} samples. Running transcribe on IO thread...")
                 val startTime = System.currentTimeMillis()
-                val text = viewModel.transcribe(audio)
+                val text = try {
+                    viewModel.transcribe(audio)
+                } catch (t: Throwable) {
+                    Log.e("MainActivity", "transcribe threw", t)
+                    viewModel.appendLog("[MainActivity][ERR] transcribe crashed: ${t.javaClass.simpleName}: ${t.message}")
+                    ""
+                }
                 val inferenceTime = System.currentTimeMillis() - startTime
+                viewModel.appendLog("[MainActivity] transcribe() completed in ${inferenceTime}ms. result=\"$text\"")
 
                 if (text.isNotBlank()) {
                     viewModel.appendLog(">>> FINAL TRANSCRIPTION [${String.format("%.2f", duration)}s audio, ${inferenceTime}ms]: \"$text\"")
-                    withContext(Dispatchers.Main) {
-                        appendTranscript(text, duration, inferenceTime)
-                    }
+                    runOnUiThread { appendTranscript(text, duration, inferenceTime) }
                 } else {
-                    viewModel.appendLog("<<< Transcription returned EMPTY string (check model output above)")
+                    viewModel.appendLog("<<< Transcription returned EMPTY string (scroll UP to see Features/Logits/TokenIDs above)")
                 }
+            } catch (t: Throwable) {
+                Log.e("MainActivity", "onSegmentFinalized handler crashed", t)
+                viewModel.appendLog("[MainActivity][ERR] onSegmentFinalized handler crashed: ${t.javaClass.simpleName}: ${t.message}")
             }
         }
 
@@ -227,25 +241,47 @@ class MainActivity : AppCompatActivity() {
         isRecording = false
         viewModel.appendLog("========== RECORDING STOPPED at ${timeFormat.format(Date())} ==========")
 
-        recordingJob?.cancel()
+        // 1) Capture local refs BEFORE nulling (critical: we null refs AFTER flush completes, not before)
+        val recordingJobSnapshot = recordingJob
+        val vadSnapshot = vadProcessor
+        val recorderSnapshot = audioRecorder
+
+        // 2) Stop the chunk collector first (cancel, not detach)
+        recordingJobSnapshot?.cancel()
         recordingJob = null
 
-        val vad = vadProcessor
+        // 3) Flush + transcribe synchronously on IO dispatcher BEFORE nulling refs or resetting UI
         lifecycleScope.launch(Dispatchers.IO) {
-            val flushed = vad?.flushSegment()
-            if (flushed != null) {
-                viewModel.appendLog("[MainActivity] flushSegment() returned audio segment of ${flushed.size} samples (transcribe should have been called by VAD)")
-            } else {
-                viewModel.appendLog("[MainActivity] flushSegment() returned null (no qualifying segment)")
+            var flushedSamples: Int? = null
+            try {
+                val flushed = vadSnapshot?.flushSegment()
+                flushedSamples = flushed?.size
+                if (flushed != null) {
+                    viewModel.appendLog("[MainActivity] flushSegment() returned audio segment of ${flushed.size} samples (${String.format("%.2f", flushed.size / 16000.0f)}s)")
+                } else {
+                    viewModel.appendLog("[MainActivity] flushSegment() returned null (no qualifying segment — too few speech frames / empty buffer)")
+                }
+            } catch (t: Throwable) {
+                Log.e("MainActivity", "flushSegment threw", t)
+                viewModel.appendLog("[MainActivity][ERR] flushSegment() crashed: ${t.javaClass.simpleName}: ${t.message}")
+            }
+
+            // 4) Now safe to stop recorder, null refs, release hardware
+            try {
+                recorderSnapshot?.stop()
+            } catch (t: Throwable) {
+                Log.e("MainActivity", "audioRecorder.stop() threw", t)
+                viewModel.appendLog("[MainActivity][ERR] audioRecorder.stop() crashed: ${t.javaClass.simpleName}: ${t.message}")
+            }
+            audioRecorder = null
+            vadProcessor = null
+
+            // 5) Reset UI state only AFTER flush + stop sequence is done
+            withContext(Dispatchers.Main) {
+                resetRecordButton()
+                updateStatus("Ready — flushed ${if (flushedSamples != null) "$flushedSamples samples" else "no segment"}")
             }
         }
-
-        audioRecorder?.stop()
-        audioRecorder = null
-        vadProcessor = null
-
-        resetRecordButton()
-        updateStatus("Ready")
     }
 
     private fun appendTranscript(text: String, durationSec: Float, inferenceTimeMs: Long) {
