@@ -1,0 +1,77 @@
+07-27 02:27:28.789 D/AndroidRuntime(  336): >>>>>> START com.android.internal.os.ZygoteInit uid 0 <<<<<<
+07-27 02:27:28.799 I/AndroidRuntime(  336): Using default boot image
+07-27 02:27:28.803 I/AndroidRuntime(  336): Leaving lock profiling enabled
+07-27 02:27:51.448 I/AndroidRuntime(  965): VM exiting with result code 0, cleanup skipped.
+07-27 02:28:18.328 V/BackupManagerService(  522): [UserID:0] restoreAtInstall pkg=com.example.sensevoiceasr token=1 restoreSet=0
+07-27 02:28:18.405 D/MediaGrants( 1668): Removed 0 media_grants for 0 user for com.example.sensevoiceasr. Reason: Mode changed: android:read_external_storage
+07-27 02:28:18.409 D/MediaGrants( 1668): Removed 0 media_grants for 0 user for com.example.sensevoiceasr. Reason: Mode changed: android:read_external_storage
+07-27 02:28:18.439 D/CarrierSvcBindHelper( 1063): onPackageAdded: com.example.sensevoiceasr
+07-27 02:28:18.453 D/ImsResolver( 1063): maybeAddedImsService, packageName: com.example.sensevoiceasr
+07-27 02:28:18.489 I/SafetyLabelChangedBroadcastReceiver(  848): received broadcast packageName: com.example.sensevoiceasr, current user: UserHandle{0}, packageChangeEvent: NEW_INSTALL, intent user: UserHandle{0}
+07-27 02:28:18.543 I/SdkSandboxManager(  522): No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10192, mPackageName='com.example.sensevoiceasr, mAppProcessToken='null'}
+07-27 02:28:18.603 D/CarrierSvcBindHelper( 1063): onPackageModified: com.example.sensevoiceasr
+07-27 02:28:18.628 D/ImsResolver( 1063): maybeAddedImsService, packageName: com.example.sensevoiceasr
+07-27 02:28:19.418 I/FontLog ( 1404): Package com.example.sensevoiceasr has no metadata [CONTEXT service_id=132 ]
+07-27 02:28:19.444 I/BlockstoreStorage( 1435): Clearing Blockstore Data for package com.example.sensevoiceasr [CONTEXT service_id=258 ]
+07-27 02:28:20.603 V/SplashScreenExceptionList(  522): SplashScreen checking exception for package com.example.sensevoiceasr (target sdk:34) -> false
+07-27 02:28:20.608 I/ActivityTaskManager(  522): START u0 {flg=0x10000000 cmp=com.example.sensevoiceasr/.MainActivity} with LAUNCH_MULTIPLE from uid 2000 (BAL_ALLOW_PERMISSION) result code=0
+07-27 02:28:20.610 V/WindowManagerShell(  843): Transition requested: android.os.BinderProxy@9d46ef2 TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=8 displayId=0 isRunning=true baseIntent=Intent { flg=0x10000000 cmp=com.example.sensevoiceasr/.MainActivity } baseActivity=ComponentInfo{com.example.sensevoiceasr/com.example.sensevoiceasr.MainActivity} topActivity=ComponentInfo{com.example.sensevoiceasr/com.example.sensevoiceasr.MainActivity} origActivity=null realActivity=ComponentInfo{com.example.sensevoiceasr/com.example.sensevoiceasr.MainActivity} numActivities=1 lastActiveTime=62592 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@a6d2943} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=ActivityInfo{fdf2bc0 com.example.sensevoiceasr.MainActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false topActivityLetterboxed= false isFromDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null }
+07-27 02:28:20.629 I/ActivityManager(  522): Start proc 4380:com.example.sensevoiceasr/u0a192 for next-top-activity {com.example.sensevoiceasr/com.example.sensevoiceasr.MainActivity}
+07-27 02:28:20.669 I/e.sensevoiceasr( 4380): Late-enabling -Xcheck:jni
+07-27 02:28:20.694 I/e.sensevoiceasr( 4380): Using CollectorTypeCC GC.
+07-27 02:28:20.703 W/e.sensevoiceasr( 4380): Unexpected CPU variant for x86: x86_64.
+07-27 02:28:20.703 W/e.sensevoiceasr( 4380): Known variants: atom, sandybridge, silvermont, goldmont, goldmont-plus, tremont, kabylake, default
+07-27 02:28:20.704 D/CoreBackPreview(  522): Window{b09dbbc u0 Splash Screen com.example.sensevoiceasr}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@e0e4e9a, mPriority=0, mIsAnimationCallback=false}
+07-27 02:28:20.819 W/ziparchive( 4380): Unable to open '/data/app/~~aE4BrlgwjNHU-LPD5r7-fg==/com.example.sensevoiceasr-XL7KkFSoLggy4bO7NP2bww==/base.dm': No such file or directory
+07-27 02:28:20.819 W/ziparchive( 4380): Unable to open '/data/app/~~aE4BrlgwjNHU-LPD5r7-fg==/com.example.sensevoiceasr-XL7KkFSoLggy4bO7NP2bww==/base.dm': No such file or directory
+07-27 02:28:20.854 V/WindowManager(  522): Sent Transition #6 createdAt=07-27 02:28:20.587 via request=TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=8 displayId=0 isRunning=true baseIntent=Intent { flg=0x10000000 cmp=com.example.sensevoiceasr/.MainActivity } baseActivity=ComponentInfo{com.example.sensevoiceasr/com.example.sensevoiceasr.MainActivity} topActivity=ComponentInfo{com.example.sensevoiceasr/com.example.sensevoiceasr.MainActivity} origActivity=null realActivity=ComponentInfo{com.example.sensevoiceasr/com.example.sensevoiceasr.MainActivity} numActivities=1 lastActiveTime=62592 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{267587f Task{8779a19 #8 type=standard A=10192:com.example.sensevoiceasr}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=null topActivityInfo=ActivityInfo{431904c com.example.sensevoiceasr.MainActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false topActivityLetterboxed= false isFromDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null }
+07-27 02:28:20.856 V/WindowManager(  522):     info={id=6 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{RemoteToken{267587f Task{8779a19 #8 type=standard A=10192:com.example.sensevoiceasr}}} m=OPEN f=NONE leash=Surface(name=Task=8)/@0x5e187d9 sb=Rect(0, 0 - 320, 640) eb=Rect(0, 0 - 320, 640) d=0},{WCT{RemoteToken{9d9c895 Task{29ecb3e #1 type=home}}} m=TO_BACK f=SHOW_WALLPAPER leash=Surface(name=Task=1)/@0x979f477 sb=Rect(0, 0 - 320, 640) eb=Rect(0, 0 - 320, 640) d=0}]}
+07-27 02:28:20.996 D/nativeloader( 4380): Configuring clns-6 for other apk /data/app/~~aE4BrlgwjNHU-LPD5r7-fg==/com.example.sensevoiceasr-XL7KkFSoLggy4bO7NP2bww==/base.apk. target_sdk_version=34, uses_libraries=, library_path=/data/app/~~aE4BrlgwjNHU-LPD5r7-fg==/com.example.sensevoiceasr-XL7KkFSoLggy4bO7NP2bww==/lib/x86_64:/data/app/~~aE4BrlgwjNHU-LPD5r7-fg==/com.example.sensevoiceasr-XL7KkFSoLggy4bO7NP2bww==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.example.sensevoiceasr
+07-27 02:28:21.031 V/GraphicsEnvironment( 4380): ANGLE GameManagerService for com.example.sensevoiceasr: false
+07-27 02:28:21.032 V/GraphicsEnvironment( 4380): com.example.sensevoiceasr is not listed in per-application setting
+07-27 02:28:21.407 W/e.sensevoiceasr( 4380): Accessing hidden method Landroid/view/View;->computeFitSystemWindows(Landroid/graphics/Rect;Landroid/graphics/Rect;)Z (unsupported, reflection, allowed)
+07-27 02:28:21.407 W/e.sensevoiceasr( 4380): Accessing hidden method Landroid/view/ViewGroup;->makeOptionalFitsSystemWindows()V (unsupported, reflection, allowed)
+07-27 02:28:21.603 I/AsrViewModel( 4380): Starting model load...
+07-27 02:28:21.605 I/OnnxInference( 4380): Loading ONNX model from file...
+07-27 02:28:21.630 D/CoreBackPreview(  522): Window{83a40b2 u0 com.example.sensevoiceasr/com.example.sensevoiceasr.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@6a09db9, mPriority=0, mIsAnimationCallback=false}
+07-27 02:28:21.784 I/OnnxInference( 4380): Copying model from assets to internal storage...
+07-27 02:28:22.094 I/AppsFilter(  522): interaction: PackageSetting{343fab7 com.example.sensevoiceasr/10192} -> PackageSetting{adfb224 com.google.android.googlequicksearchbox/10132} BLOCKED
+07-27 02:28:22.094 I/AppsFilter(  522): interaction: PackageSetting{343fab7 com.example.sensevoiceasr/10192} -> PackageSetting{55e018d com.google.android.apps.messaging/10129} BLOCKED
+07-27 02:28:22.094 I/AppsFilter(  522): interaction: PackageSetting{343fab7 com.example.sensevoiceasr/10192} -> PackageSetting{d8dcf42 com.google.android.gm/10141} BLOCKED
+07-27 02:28:22.094 I/AppsFilter(  522): interaction: PackageSetting{343fab7 com.example.sensevoiceasr/10192} -> PackageSetting{9938b53 com.google.android.settings.intelligence/10118} BLOCKED
+07-27 02:28:22.384 I/ImeTracker(  522): com.example.sensevoiceasr:c369ca80: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_UNSPECIFIED_WINDOW
+07-27 02:28:22.385 I/ImeTracker(  522): com.example.sensevoiceasr:c369ca80: onCancelled at PHASE_SERVER_SHOULD_HIDE
+07-27 02:28:22.389 I/GoogleInputMethodService( 1518): GoogleInputMethodService.onStartInput():1877 onStartInput(EditorInfo{inputType=0x0(NULL) imeOptions=0x0 privateImeOptions=null actionName=UNSPECIFIED actionLabel=null actionId=0 initialSelStart=-1 initialSelEnd=-1 initialCapsMode=0x0 hintText=null label=null packageName=com.example.sensevoiceasr fieldId=0 fieldName=null extras=null}, false)
+07-27 02:28:22.420 D/CoreBackPreview(  522): Window{b09dbbc u0 Splash Screen com.example.sensevoiceasr}: Setting back callback null
+07-27 02:28:22.421 W/InputManager-JNI(  522): Input channel object 'b09dbbc Splash Screen com.example.sensevoiceasr (client)' was disposed without first being removed with the input manager!
+07-27 02:28:22.622 W/ziparchive(  522): Unable to open '/data/app/~~aE4BrlgwjNHU-LPD5r7-fg==/com.example.sensevoiceasr-XL7KkFSoLggy4bO7NP2bww==/base.dm': No such file or directory
+07-27 02:28:22.640 I/ActivityTaskManager(  522): Displayed com.example.sensevoiceasr/.MainActivity for user 0: +1s823ms
+07-27 02:28:25.643 I/OnnxInference( 4380): Model copied in 3859ms
+07-27 02:28:25.930 I/AiAiEcho( 1646): AppFetcherImplV2 updateApps package:[com.example.sensevoiceasr], userId:[0], reason:[package is added.].
+07-27 02:28:25.946 I/AiAiEcho( 1646): AppFetcherImpl onPackageChanged com.example.sensevoiceasr.
+07-27 02:28:25.947 I/AiAiEcho( 1646): AppIndexer Package:[com.example.sensevoiceasr] UserProfile:[0] Enabled:[true].
+07-27 02:28:25.947 I/AiAiEcho( 1646): AppFetcherImplV2 updateApps package:[com.example.sensevoiceasr], userId:[0], reason:[package is updated.].
+07-27 02:28:26.881 E/OnnxInference( 4380): ONNX error: Error code - ORT_FAIL - message: Load model from /data/user/0/com.example.sensevoiceasr/files/models/model_quant.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model.cc:180 onnxruntime::Model::Model(ModelProto &&, const PathString &, const IOnnxRuntimeOpSchemaRegistryList *, const logging::Logger &, const ModelOptions &) Unsupported model IR version: 10, max supported IR version: 9
+07-27 02:28:26.881 E/OnnxInference( 4380): 
+07-27 02:28:26.881 E/OnnxInference( 4380): ai.onnxruntime.OrtException: Error code - ORT_FAIL - message: Load model from /data/user/0/com.example.sensevoiceasr/files/models/model_quant.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model.cc:180 onnxruntime::Model::Model(ModelProto &&, const PathString &, const IOnnxRuntimeOpSchemaRegistryList *, const logging::Logger &, const ModelOptions &) Unsupported model IR version: 10, max supported IR version: 9
+07-27 02:28:26.881 E/OnnxInference( 4380): 
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at ai.onnxruntime.OrtSession.createSession(Native Method)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at ai.onnxruntime.OrtSession.<init>(OrtSession.java:74)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at ai.onnxruntime.OrtEnvironment.createSession(OrtEnvironment.java:236)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at ai.onnxruntime.OrtEnvironment.createSession(OrtEnvironment.java:221)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at com.example.sensevoiceasr.asr.OnnxInference.loadModel(OnnxInference.kt:78)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at com.example.sensevoiceasr.AsrViewModel$loadModel$1.invokeSuspend(AsrViewModel.kt:46)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at kotlin.coroutines.jvm.internal.BaseContinuationImpl.resumeWith(ContinuationImpl.kt:33)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at kotlinx.coroutines.DispatchedTask.run(DispatchedTask.kt:108)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at kotlinx.coroutines.internal.LimitedDispatcher$Worker.run(LimitedDispatcher.kt:115)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at kotlinx.coroutines.scheduling.TaskImpl.run(Tasks.kt:103)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at kotlinx.coroutines.scheduling.CoroutineScheduler.runSafely(CoroutineScheduler.kt:584)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.executeTask(CoroutineScheduler.kt:793)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.runWorker(CoroutineScheduler.kt:697)
+07-27 02:28:26.881 E/OnnxInference( 4380): 	at kotlinx.coroutines.scheduling.CoroutineScheduler$Worker.run(CoroutineScheduler.kt:684)
+07-27 02:28:26.893 E/AsrViewModel( 4380): Model load failed: ONNX error: Error code - ORT_FAIL - message: Load model from /data/user/0/com.example.sensevoiceasr/files/models/model_quant.onnx failed:/onnxruntime_src/onnxruntime/core/graph/model.cc:180 onnxruntime::Model::Model(ModelProto &&, const PathString &, const IOnnxRuntimeOpSchemaRegistryList *, const logging::Logger &, const ModelOptions &) Unsupported model IR version: 10, max supported IR version: 9
+07-27 02:28:27.107 D/ProfileInstaller( 4380): Installing profile for com.example.sensevoiceasr
+07-27 02:28:30.761 W/NotificationService(  522): Toast already killed. pkg=com.example.sensevoiceasr token=android.os.BinderProxy@e25779f
+07-27 02:28:32.151 I/AppsFilter(  522): interaction: PackageSetting{343fab7 com.example.sensevoiceasr/10192} -> PackageSetting{4e7cd2e com.google.android.youtube/10138} BLOCKED
+07-27 02:28:32.151 I/AppsFilter(  522): interaction: PackageSetting{343fab7 com.example.sensevoiceasr/10192} -> PackageSetting{797ac57 com.google.android.apps.maps/10155} BLOCKED
+07-27 02:28:32.151 I/AppsFilter(  522): interaction: PackageSetting{343fab7 com.example.sensevoiceasr/10192} -> PackageSetting{6ca90cf com.google.android.contacts/10154} BLOCKED
