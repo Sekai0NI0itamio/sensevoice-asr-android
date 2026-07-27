@@ -21,7 +21,26 @@ android {
         }
     }
 
+    signingConfigs {
+        // CI keystore for consistent signature across builds
+        val keystoreFile = rootProject.file("debug.keystore")
+        if (keystoreFile.exists()) {
+            create("ciDebug") {
+                storeFile = keystoreFile
+                storePassword = "android"
+                keyAlias = "debug"
+                keyPassword = "android"
+            }
+        }
+    }
+
     buildTypes {
+        debug {
+            val ciDebug = signingConfigs.findByName("ciDebug")
+            if (ciDebug != null) {
+                signingConfig = ciDebug
+            }
+        }
         release {
             isMinifyEnabled = false
             proguardFiles(

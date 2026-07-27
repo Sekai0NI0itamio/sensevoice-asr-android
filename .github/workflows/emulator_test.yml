@@ -36,6 +36,11 @@ jobs:
       - name: Grant gradlew permission
         run: chmod +x gradlew
 
+      - name: Decode signing keystore
+        env:
+          DEBUG_KEYSTORE_B64: ${{ secrets.DEBUG_KEYSTORE_B64 }}
+        run: echo "$DEBUG_KEYSTORE_B64" | base64 -d > debug.keystore
+
       - name: Build debug APK
         run: ./gradlew assembleDebug --stacktrace
 
